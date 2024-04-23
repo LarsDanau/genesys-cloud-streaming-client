@@ -1853,6 +1853,35 @@ describe('handleGenesysOffer', () => {
     await webrtc['handleGenesysOffer'](iq);
     expect.assertions(2);
   });
+
+  it('should renegotiate if there is an existing session', async () => {
+    const iq: IQ = {
+      type: 'set',
+      genesysWebrtc: {
+        jsonrpc: '2.0',
+        method: 'offer',
+        params: {
+          sessionId: 'session24',
+          conversationId: 'cid',
+          sdp: 'my-offer sdp'
+        }
+      }
+    };
+
+    webrtc.on('incomingRtcSession', (session: GenesysCloudMediaSession) => {
+      expect(session.setRemoteDescription).toHaveBeenCalled();
+      expect(webrtc['webrtcSessions'].length).toEqual(1);
+    });
+
+    const existingSession = { id: iq.genesysWebrtc?.params?.sessionId };
+
+    const spy = webrtc['handleGenesysRenegotiate'] = jest.fn();
+
+    webrtc['webrtcSessions'] = [existingSession as any];
+
+    await webrtc['handleGenesysOffer'](iq);
+    expect(spy).toHaveBeenCalledWith(existingSession, 'my-offer sdp');
+  });
   
   it('should set ignoreHostCandidatesForForceTurnFF', async () => {
     Object.defineProperty(browserama, 'isFirefox', { get: () => true });
@@ -1999,6 +2028,33 @@ describe('handleGenesysOffer', () => {
     };
 
     await webrtc['handleGenesysOffer'](iq);
+  });
+});
+
+describe('handleGenesysRenegotiate', () => {
+  let client: Client;
+  let webrtc: WebrtcExtension;
+
+  beforeEach(() => {
+    client = new Client({});
+    webrtc = new WebrtcExtension(client as any, {} as any);
+  });
+
+  it('should set remoteDescription and accept session', async () => {
+    const setRemoteDescriptionSpy = jest.fn().mockResolvedValue(null);
+    const acceptSpy = jest.fn().mockResolvedValue(null);
+
+    const existingSession = {
+      peerConnection: {
+        setRemoteDescription: setRemoteDescriptionSpy
+      },
+      accept: acceptSpy
+    };
+
+    await webrtc['handleGenesysRenegotiate'](existingSession as any, 'i like cashews');
+
+    expect(setRemoteDescriptionSpy).toHaveBeenCalledWith({ sdp: 'i like cashews', type: 'offer' });
+    expect(acceptSpy).toHaveBeenCalled();
   });
 });
 

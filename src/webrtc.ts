@@ -11,7 +11,7 @@ import JingleSession, { SessionOpts } from 'stanza/jingle/Session';
 import { isFirefox } from 'browserama';
 
 import { definitions, Propose } from './stanza-definitions/webrtc-signaling';
-import { isAcdJid, isScreenRecordingJid, isSoftphoneJid, isVideoJid, calculatePayloadSize, retryPromise, RetryPromise } from './utils';
+import { isAcdJid, isScreenRecordingJid, isSoftphoneJid, isVideoJid, calculatePayloadSize, retryPromise, RetryPromise, getUfragFromSdp } from './utils';
 import { Client } from './client';
 import { deepFlatten, formatStatsEvent } from './stats-formatter';
 import { ExtendedRTCIceServer, IClientOptions, SessionTypes, IPendingSession, StreamingClientExtension, GenesysWebrtcSdpParams, GenesysSessionTerminateParams, GenesysWebrtcOfferParams, NRProxyStat, FirstProposeStat, InsightActionDetails, InsightReport, InsightAction, FlatObject, OnlineStatusStat } from './types/interfaces';
@@ -240,6 +240,16 @@ export class WebrtcExtension extends EventEmitter implements StreamingClientExte
       mediaSessionParams = commonParams;
     }
 
+    // if we have a session that is already associated with this sessionId, we know it's a renegotiate
+    // for sdpOverXmpp, we treat a renego and a reinvite (renego + ice change) the same
+    const existingSession = this.webrtcSessions.find(s => s.id === mediaSessionParams.id);
+
+    // renego
+    if (existingSession) {
+      return this.handleGenesysRenegotiate(existingSession, params.sdp);
+    }
+
+    // reinvite/new session handled the same way here
     const session = new GenesysCloudMediaSession(this, mediaSessionParams);
 
     await session.setRemoteDescription(params.sdp);
@@ -252,6 +262,11 @@ export class WebrtcExtension extends EventEmitter implements StreamingClientExte
 
     this.webrtcSessions.push(session);
     return this.emit(events.INCOMING_RTCSESSION, session);
+  }
+
+  private async handleGenesysRenegotiate (existingSession: GenesysCloudMediaSession, newSdp: string) {
+    await existingSession.peerConnection.setRemoteDescription({ sdp: newSdp, type: 'offer' });
+    await existingSession.accept();
   }
 
   private async handleGenesysIceCandidate (iq: IQ) {
