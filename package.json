@@ -61,7 +61,7 @@
     "limiter": "^1.1.0",
     "lodash.throttle": "^4.1.1",
     "lru-cache": "^6.0.0",
-    "stanza": "^12.17.2",
+    "stanza": "git://github.com/LarsDanau/stanza.git#MO",
     "strict-event-emitter-types": "^2.0.0",
     "unorm": "^1.6.0",
     "uuid": "^8.3.0",
